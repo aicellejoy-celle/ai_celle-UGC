@@ -2,7 +2,8 @@ import { AuthButton } from "@/components/auth-button";
 import { Suspense } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Camera, Video, Smartphone, PenTool, Instagram, Twitter, Mail, ArrowRight } from "lucide-react";
+import { Camera, Video, Smartphone, PenTool, Instagram, Twitter, Mail, ArrowRight, UserCircle } from "lucide-react";
+import { createClient } from "@/lib/supabase/server";
 
 export default function Home() {
   return (
@@ -18,11 +19,10 @@ export default function Home() {
             <Link href="#about" className="hover:text-white transition-colors">About</Link>
             <Link href="#services" className="hover:text-white transition-colors">Services</Link>
             <Link href="#portfolio" className="hover:text-white transition-colors">Portfolio</Link>
-            <div className="pl-4 border-l border-white/20 flex items-center h-8">
-              <Suspense fallback={<div className="w-24 h-8 animate-pulse bg-white/10 rounded-md"></div>}>
-                <AuthButton />
-              </Suspense>
-            </div>
+            
+            <Suspense fallback={<div className="w-32 h-8 animate-pulse bg-white/10 rounded-md"></div>}>
+              <DynamicNavbar />
+            </Suspense>
             <Link href="#contact" className="px-5 py-2 rounded-full bg-white text-black hover:bg-neutral-200 transition-all font-semibold">
               Work with me
             </Link>
@@ -62,27 +62,18 @@ export default function Home() {
         <div className="max-w-6xl w-full px-6 md:px-12 grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
           <div className="relative h-[600px] w-full rounded-3xl overflow-hidden glass-dark border-white/5 p-2">
             <div className="relative w-full h-full rounded-2xl overflow-hidden">
-              <Image 
-                src="/images/ugc_sample_fashion_1773196685081.png" 
-                alt="Ai Celle Portrait" 
-                fill 
-                className="object-cover hover:scale-105 transition-transform duration-700"
-              />
+              <Suspense fallback={<div className="w-full h-full bg-neutral-900 animate-pulse"></div>}>
+                <DynamicAvatar />
+              </Suspense>
             </div>
           </div>
           <div className="flex flex-col gap-6">
             <h2 className="text-sm font-bold tracking-widest uppercase text-pink-400">About Me</h2>
-            <h3 className="text-4xl md:text-5xl font-serif text-white leading-tight">
-              Hi, I'm Celle.<br/> Your go-to UGC Creator.
-            </h3>
-            <p className="text-neutral-400 text-lg leading-relaxed">
-              Based in the vibrant heart of the creative industry, I specialize in producing highly-engaging, thumb-stopping short-form content. With an eye for modern aesthetics and a deep understanding of social algorithms, I bridge the gap between your brand and your audience.
-            </p>
-            <p className="text-neutral-400 text-lg leading-relaxed mb-4">
-              Whether it's a seamless TikTok transition, a stunning Instagram Reel, or aesthetic product photography, I bring authentic energy that converts viewers into loyal customers.
-            </p>
+            <Suspense fallback={<div className="w-full h-40 bg-neutral-900 animate-pulse rounded-xl"></div>}>
+              <DynamicBio />
+            </Suspense>
             
-            <div className="flex gap-4">
+            <div className="flex gap-4 mt-6">
               <div className="glass px-6 py-4 rounded-2xl flex flex-col">
                 <span className="text-3xl font-bold text-white mb-1">50+</span>
                 <span className="text-sm text-neutral-400">Brands Trusted</span>
@@ -190,16 +181,102 @@ export default function Home() {
           </a>
 
           <div className="flex gap-6 mt-12 border-t border-white/10 pt-12 w-full justify-center">
-            <a href="#" className="p-4 rounded-full glass hover:bg-white/10 transition-colors text-neutral-400 hover:text-white">
-              <Instagram className="w-6 h-6" />
-            </a>
-            <a href="#" className="p-4 rounded-full glass hover:bg-white/10 transition-colors text-neutral-400 hover:text-white">
-              <Twitter className="w-6 h-6" />
-            </a>
+            <Suspense fallback={null}>
+              <DynamicSocialLinks />
+            </Suspense>
           </div>
           <p className="mt-12 text-sm text-neutral-500 font-light">© 2026 Ai Celle UGC. All rights reserved.</p>
         </div>
       </footer>
     </main>
+  );
+}
+
+// --- Dynamic Server Components for Portfolio Data ---
+
+async function getProfile() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+  return data;
+}
+
+async function DynamicNavbar() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  return (
+    <>
+      {user && (
+        <Link href="/protected/profile" className="flex items-center gap-2 hover:text-white transition-colors text-pink-300">
+          <UserCircle className="w-4 h-4" /> Edit Profile
+        </Link>
+      )}
+
+      <div className="pl-4 border-l border-white/20 flex items-center h-8">
+        <AuthButton />
+      </div>
+    </>
+  );
+}
+
+async function DynamicAvatar() {
+  const profile = await getProfile();
+  const supabase = await createClient();
+  
+  let imageUrl = "/images/ugc_sample_fashion_1773196685081.png"; // default
+  if (profile?.avatar_url) {
+    const { data } = supabase.storage.from("user-uploads").getPublicUrl(profile.avatar_url);
+    imageUrl = data.publicUrl;
+  }
+
+  return (
+    <Image 
+      src={imageUrl} 
+      alt="Creator Portrait" 
+      fill 
+      className="object-cover hover:scale-105 transition-transform duration-700"
+    />
+  );
+}
+
+async function DynamicBio() {
+  const profile = await getProfile();
+  
+  const name = profile?.full_name || "Celle";
+  const bio = profile?.bio || "Based in the vibrant heart of the creative industry, I specialize in producing highly-engaging, thumb-stopping short-form content. With an eye for modern aesthetics and a deep understanding of social algorithms, I bridge the gap between your brand and your audience.\n\nWhether it's a seamless TikTok transition, a stunning Instagram Reel, or aesthetic product photography, I bring authentic energy that converts viewers into loyal customers.";
+
+  const paragraphs = bio.split('\n').filter((p: string) => p.trim() !== '');
+
+  return (
+    <>
+      <h3 className="text-4xl md:text-5xl font-serif text-white leading-tight mb-4">
+        Hi, I'm {name}.<br/> Your go-to UGC Creator.
+      </h3>
+      {paragraphs.map((p: string, i: number) => (
+        <p key={i} className="text-neutral-400 text-lg leading-relaxed mb-4">
+          {p}
+        </p>
+      ))}
+    </>
+  );
+}
+
+async function DynamicSocialLinks() {
+  const profile = await getProfile();
+  
+  const insta = profile?.instagram_url || "#";
+  const twit = profile?.twitter_url || "#";
+
+  return (
+    <>
+      <a href={insta} className="p-4 rounded-full glass hover:bg-white/10 transition-colors text-neutral-400 hover:text-white" target="_blank" rel="noreferrer">
+        <Instagram className="w-6 h-6" />
+      </a>
+      <a href={twit} className="p-4 rounded-full glass hover:bg-white/10 transition-colors text-neutral-400 hover:text-white" target="_blank" rel="noreferrer">
+        <Twitter className="w-6 h-6" />
+      </a>
+    </>
   );
 }
